@@ -1,0 +1,44 @@
+templates:
+  - "a painting in the {label} style"
+  - "an artwork representative of {label}"
+classes:
+  art_nouveau:
+    label: "Art Nouveau"
+    descriptions:
+      - "decorative flowing lines, floral motifs, and elegant ornamental composition"
+  baroque:
+    label: "Baroque"
+    descriptions:
+      - "dramatic light and shadow, theatrical composition, and rich detail"
+  expressionism:
+    label: "Expressionism"
+    descriptions:
+      - "distorted forms, intense color, and emotional brushwork"
+  impressionism:
+    label: "Impressionism"
+    descriptions:
+      - "visible short brushstrokes, changing light, and outdoor color atmosphere"
+  post_impressionism:
+    label: "Post-Impressionism"
+    descriptions:
+      - "structured color, expressive brushwork, and symbolic composition after Impressionism"
+  realism:
+    label: "Realism"
+    descriptions:
+      - "naturalistic depiction of ordinary subjects with restrained idealization"
+  renaissance:
+    label: "Renaissance"
+    descriptions:
+      - "balanced perspective, classical proportion, and harmonious human figures"
+  romanticism:
+    label: "Romanticism"
+    descriptions:
+      - "dramatic emotion, sublime landscapes, and expressive historical scenes"
+  surrealism:
+    label: "Surrealism"
+    descriptions:
+      - "dreamlike imagery, unexpected object combinations, and irrational scenes"
+  ukiyo_e:
+    label: "Ukiyo-e"
+    descriptions:
+      - "Japanese woodblock print style with flat color, strong outlines, and everyday scenes"

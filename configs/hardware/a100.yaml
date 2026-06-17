@@ -1,0 +1,11 @@
+hardware_tag: A100
+data:
+  num_workers: 16
+train:
+  device: cuda
+  batch_size: 128
+  amp: true
+  compile: false
+  grad_accumulation_steps: 1
+output:
+  run_root: classify/outputs/runs/A100

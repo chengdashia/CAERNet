@@ -1,0 +1,11 @@
+hardware_tag: 3060ti
+data:
+  num_workers: 4
+train:
+  device: cuda
+  batch_size: 16
+  amp: true
+  compile: false
+  grad_accumulation_steps: 8
+output:
+  run_root: classify/outputs/runs/3060ti

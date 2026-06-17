@@ -1,0 +1,41 @@
+data:
+  train_dir: classify/data/artbench10/train
+  val_dir: classify/data/artbench10_paper/val
+  image_size: 256
+  num_workers: 16
+  augment: art
+model:
+  architecture: resnet50
+  pretrained: true
+  use_coord_attention: false
+  dropout: 0.0
+loss:
+  energy_lambda: 0.0
+  energy_margin: -5.0
+  label_smoothing: 0.0
+  contrastive_lambda: 0.0
+  contrastive_temperature: 0.1
+train:
+  seed: 42
+  device: cuda
+  epochs: 120
+  batch_size: 256
+  lr: 0.0001
+  min_lr: 1.0e-06
+  weight_decay: 0.0001
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+  backbone_lr_scale: 1.0
+  gradient_clip: 1.0
+  mixup_alpha: 0.0
+  patience: 20
+  amp: true
+  compile: false
+  grad_accumulation_steps: 1
+output:
+  run_dir: classify/outputs/runs/A100/baseline_resnet50_clean_ce_b256x1
+eval:
+  test_each_epoch: true
+  test_dir: classify/data/artbench10_paper/test
+  tta_horizontal_flip: true

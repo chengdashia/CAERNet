@@ -1,0 +1,24 @@
+data:
+  train_dir: classify/data/artbench10/train
+  val_dir: classify/data/artbench10_paper/val
+  image_size: 224
+  num_workers: 16
+model:
+  architecture: resnet18
+  pretrained: false
+  use_coord_attention: true
+loss:
+  energy_lambda: 0.01
+  energy_margin: -5.0
+train:
+  seed: 42
+  device: cuda
+  epochs: 30
+  batch_size: 32
+  lr: 0.0003
+  weight_decay: 0.0001
+  grad_accumulation_steps: 1
+  amp: true
+  compile: false
+output:
+  run_dir: classify/outputs/runs/A100/artbench_resnet18_ca_energy_b32x1

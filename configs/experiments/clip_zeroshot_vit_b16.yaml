@@ -1,0 +1,33 @@
+data:
+  train_dir: classify/data/artbench10/train
+  val_dir: classify/data/artbench10_paper/val
+  image_size: 224
+  num_workers: 8
+  augment: basic
+  normalize: clip
+model:
+  architecture: clip_zero_shot
+  clip_model_name: ViT-B-16
+  clip_pretrained: openai
+  prompt_path: classify/CAERNet/configs/prompts/artbench10_styles.yaml
+loss:
+  energy_lambda: 0.0
+  label_smoothing: 0.0
+train:
+  seed: 42
+  device: cuda
+  eval_only: true
+  epochs: 1
+  batch_size: 128
+  lr: 0.0
+  weight_decay: 0.0
+  optimizer: adamw
+  scheduler: none
+  amp: true
+  freeze: none
+output:
+  run_name: clip_zeroshot_vit_b16
+eval:
+  test_each_epoch: true
+  test_dir: classify/data/artbench10_paper/test
+  tta_horizontal_flip: false
