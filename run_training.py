@@ -16,7 +16,6 @@ if str(CAERNET_ROOT) not in sys.path:
     sys.path.insert(0, str(CAERNET_ROOT))
 
 from src.train import train_from_config
-from src.prepare_artbench_paper_split import prepare_split
 
 
 def _load_yaml(path: Path) -> dict:
@@ -52,35 +51,24 @@ def build_effective_config(config_path: Path, hardware_path: Path | None = None)
     return config
 
 
-def _ensure_artbench_paper_split(config: dict):
+def _ensure_dataset_ready(config: dict):
+    required_paths = [
+        Path(config["data"]["train_dir"]),
+        Path(config["data"]["val_dir"]),
+    ]
+    test_dir = config.get("eval", {}).get("test_dir")
+    if test_dir:
+        required_paths.append(Path(test_dir))
 
-    val_dir = Path(config["data"]["val_dir"])
-    if val_dir.exists():
-        return
-
-    if "artbench10_paper" not in val_dir.as_posix():
-        return
-
-    source_test_dir = Path("classify/data/artbench10/test")
-    output_dir = Path("classify/data/artbench10_paper")
-    if not source_test_dir.exists():
+    missing = [path for path in required_paths if not path.exists()]
+    if missing:
+        missing_text = "\n".join(f"  - {path}" for path in missing)
         raise FileNotFoundError(
-            "Missing ArtBench-10 source test split. Expected: "
-            f"{source_test_dir}. Put the dataset under classify/data/artbench10 first."
+            "Dataset is not ready. Missing paths:\n"
+            f"{missing_text}\n\n"
+            "Run this once from /home/kmyh/classify/CAERNet:\n"
+            "  python prepare_data.py\n"
         )
-
-    print(
-        "Missing paper validation split; preparing randomized "
-        "ArtBench-10 val/test split..."
-    )
-    prepare_split(
-        source_test_dir=source_test_dir,
-        output_dir=output_dir,
-        val_per_class=500,
-        seed=42,
-        overwrite=True,
-    )
-    print(f"Prepared split: {output_dir}")
 
 
 def run(config_relative_path: str):
@@ -90,7 +78,7 @@ def run(config_relative_path: str):
 
     os.chdir(REPO_ROOT)
     config = build_effective_config(config_path)
-    _ensure_artbench_paper_split(config)
+    _ensure_dataset_ready(config)
     train_from_config(config)
 
 
@@ -127,7 +115,7 @@ def main() -> int:
     config_path = _resolve_config_path(args.config)
     hardware_path = _resolve_hardware_path(args.hardware)
     config = build_effective_config(config_path, hardware_path)
-    _ensure_artbench_paper_split(config)
+    _ensure_dataset_ready(config)
     train_from_config(config, dry_run=args.dry_run)
     return 0
 

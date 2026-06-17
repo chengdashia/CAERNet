@@ -37,5 +37,5 @@ output:
   run_dir: classify/outputs/runs/A100/baseline_resnet50_clean_ce_b256x1
 eval:
   test_each_epoch: true
-  test_dir: classify/data/artbench10_paper/test
+  test_dir: classify/data/artbench10/test
   tta_horizontal_flip: true

@@ -52,9 +52,19 @@ class ClipArtClassifier(nn.Module):
         self.logit_scale = logit_scale
 
         open_clip = _require_open_clip()
+        pretrained_arg = pretrained
+        pretrained_path = Path(pretrained)
+        if pretrained_path.suffix in {".bin", ".pt", ".pth", ".ckpt"}:
+            if not pretrained_path.exists():
+                raise FileNotFoundError(
+                    "CLIP local weight file not found: "
+                    f"{pretrained_path}. Put ViT-B/16 weights at this path "
+                    "or update model.clip_pretrained in the YAML config."
+                )
+            pretrained_arg = str(pretrained_path)
         self.clip, _, _ = open_clip.create_model_and_transforms(
             clip_model_name,
-            pretrained=pretrained,
+            pretrained=pretrained_arg,
         )
         for parameter in self.clip.parameters():
             parameter.requires_grad = False

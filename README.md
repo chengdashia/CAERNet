@@ -49,7 +49,20 @@ classify/data/artbench10_paper/
   test/
 ```
 
-如果 `artbench10_paper` 不存在，`run_training.py` 会基于 `artbench10/test` 自动生成。
+首次训练前运行：
+
+```bash
+cd /home/kmyh/classify/CAERNet
+python prepare_data.py
+```
+
+当前划分策略：
+
+- `train`：从原始训练集移出验证集后约 45,000 张。
+- `val`：从原始训练集抽取，每类 500 张。
+- `test`：保留 ArtBench-10 原始测试集 10,000 张。
+
+`run_training.py` 只检查数据是否存在，不再自动拆分数据。
 
 ## 训练入口
 

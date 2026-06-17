@@ -38,5 +38,5 @@ output:
   run_name: clip_adapter_vit_l14_a100
 eval:
   test_each_epoch: true
-  test_dir: classify/data/artbench10_paper/test
+  test_dir: classify/data/artbench10/test
   tta_horizontal_flip: false

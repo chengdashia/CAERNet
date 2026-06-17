@@ -39,5 +39,5 @@ output:
   run_dir: classify/outputs/runs/A100/ms_caernet_resnet50_no_contrastive_b128x1_aug
 eval:
   test_each_epoch: true
-  test_dir: classify/data/artbench10_paper/test
+  test_dir: classify/data/artbench10/test
   tta_horizontal_flip: true

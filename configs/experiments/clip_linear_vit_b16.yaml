@@ -8,7 +8,7 @@ data:
 model:
   architecture: clip_linear_probe
   clip_model_name: ViT-B-16
-  clip_pretrained: openai
+  clip_pretrained: /home/kmyh/classify/models/open_clip/vit_b16_openai.bin
   dropout: 0.0
 loss:
   energy_lambda: 0.0
@@ -31,5 +31,5 @@ output:
   run_name: clip_linear_vit_b16
 eval:
   test_each_epoch: true
-  test_dir: classify/data/artbench10_paper/test
+  test_dir: classify/data/artbench10/test
   tta_horizontal_flip: false
