@@ -31,7 +31,27 @@ def build_transforms(
     augment: str = "basic",
     normalize: str = "imagenet",
 ):
+    interpolation = (
+        InterpolationMode.BICUBIC
+        if normalize == "clip"
+        else InterpolationMode.BILINEAR
+    )
     if train:
+        if augment == "clip_probe":
+            return transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(
+                        image_size,
+                        scale=(0.75, 1.0),
+                        ratio=(0.9, 1.1),
+                        interpolation=interpolation,
+                    ),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    _normalize_transform(normalize),
+                ]
+            )
+
         if augment == "strong":
             return transforms.Compose(
                 [
@@ -39,7 +59,7 @@ def build_transforms(
                         image_size,
                         scale=(0.55, 1.0),
                         ratio=(0.8, 1.2),
-                        interpolation=InterpolationMode.BILINEAR,
+                        interpolation=interpolation,
                     ),
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomRotation(15),
@@ -66,7 +86,7 @@ def build_transforms(
                         image_size,
                         scale=(0.6, 1.0),
                         ratio=(0.85, 1.15),
-                        interpolation=InterpolationMode.BILINEAR,
+                        interpolation=interpolation,
                     ),
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomRotation(10),
@@ -100,7 +120,7 @@ def build_transforms(
         [
             transforms.Resize(
                 int(image_size * 1.14),
-                interpolation=InterpolationMode.BILINEAR,
+                interpolation=interpolation,
             ),
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),

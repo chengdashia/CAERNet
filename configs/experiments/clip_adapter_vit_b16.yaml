@@ -3,7 +3,7 @@ data:
   val_dir: classify/data/artbench10_paper/val
   image_size: 224
   num_workers: 8
-  augment: art
+  augment: clip_probe
   normalize: clip
 model:
   architecture: clip_adapter

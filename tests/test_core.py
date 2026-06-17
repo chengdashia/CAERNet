@@ -12,6 +12,7 @@ from src.diagnostics import class_counts, summarize_history
 from src.losses import energy_barrier_loss, energy_regularization_loss
 from src.metrics import classification_metrics
 from src.models import build_model as build_registered_model
+from src.models.clip_art import ClipArtClassifier
 from src.models.coord_attention import CoordAttention
 from src.models.resnet_ca import build_model
 from src.model_summary import summarize_model
@@ -595,6 +596,33 @@ def test_clip_architectures_are_registered_without_importing_open_clip():
     assert "clip_zero_shot" in CLIP_BUILDERS
     assert "clip_linear_probe" in CLIP_BUILDERS
     assert "clip_adapter" in CLIP_BUILDERS
+
+
+def test_frozen_clip_encoder_stays_eval_when_head_trains():
+    model = ClipArtClassifier.__new__(ClipArtClassifier)
+    torch.nn.Module.__init__(model)
+    model.clip = torch.nn.Dropout(p=0.5)
+    model.adapter = None
+    model.classifier = torch.nn.Linear(4, 2)
+
+    model.train()
+
+    assert model.training is True
+    assert model.classifier.training is True
+    assert model.clip.training is False
+
+
+def test_clip_probe_augmentation_avoids_random_erasing():
+    from src.datasets import build_transforms
+
+    transform = build_transforms(
+        image_size=224,
+        train=True,
+        augment="clip_probe",
+        normalize="clip",
+    )
+
+    assert not any(step.__class__.__name__ == "RandomErasing" for step in transform.transforms)
 
 
 def test_hardware_profile_overrides_batch_workers_and_run_dir(tmp_path):

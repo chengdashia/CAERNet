@@ -68,6 +68,7 @@ class ClipArtClassifier(nn.Module):
         )
         for parameter in self.clip.parameters():
             parameter.requires_grad = False
+        self.clip.eval()
 
         embed_dim = _clip_embed_dim(self.clip)
         self.adapter: nn.Module | None = None
@@ -104,10 +105,16 @@ class ClipArtClassifier(nn.Module):
         return torch.stack(prototypes, dim=0)
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
+        self.clip.eval()
         with torch.no_grad():
             features = self.clip.encode_image(images)
         features = nn.functional.normalize(features.float(), dim=-1)
         return features
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        self.clip.eval()
+        return self
 
     def forward(self, images: torch.Tensor):
         features = self.encode_image(images)
