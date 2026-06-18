@@ -28,7 +28,7 @@ def _clip_embed_dim(model) -> int:
 
 
 class ClipArtClassifier(nn.Module):
-    """Frozen CLIP image encoder with zero-shot, linear, or adapter heads."""
+    """CLIP image encoder with zero-shot, linear, or adapter heads."""
 
     def __init__(
         self,
@@ -41,6 +41,7 @@ class ClipArtClassifier(nn.Module):
         adapter_dim: int = 512,
         dropout: float = 0.1,
         logit_scale: float = 100.0,
+        unfreeze_last_n_blocks: int = 0,
     ):
         super().__init__()
         if mode not in {"zero_shot", "linear_probe", "adapter"}:
@@ -50,6 +51,7 @@ class ClipArtClassifier(nn.Module):
         self.class_names = class_names
         self.clip_model_name = clip_model_name
         self.logit_scale = logit_scale
+        self.clip_trainable = unfreeze_last_n_blocks > 0
 
         open_clip = _require_open_clip()
         pretrained_arg = pretrained
@@ -68,6 +70,8 @@ class ClipArtClassifier(nn.Module):
         )
         for parameter in self.clip.parameters():
             parameter.requires_grad = False
+        if unfreeze_last_n_blocks > 0:
+            self._unfreeze_last_visual_blocks(unfreeze_last_n_blocks)
         self.clip.eval()
 
         embed_dim = _clip_embed_dim(self.clip)
@@ -90,6 +94,35 @@ class ClipArtClassifier(nn.Module):
             text_features = self._build_text_prototypes(open_clip, prompt_path)
             self.register_buffer("text_features", text_features, persistent=False)
 
+    def _unfreeze_last_visual_blocks(self, n_blocks: int):
+        visual = getattr(self.clip, "visual", None)
+        blocks = None
+        if visual is not None:
+            transformer = getattr(visual, "transformer", None)
+            if transformer is not None and hasattr(transformer, "resblocks"):
+                blocks = transformer.resblocks
+            trunk = getattr(visual, "trunk", None)
+            if blocks is None and trunk is not None and hasattr(trunk, "blocks"):
+                blocks = trunk.blocks
+        if blocks is None:
+            raise ValueError(
+                "Cannot unfreeze CLIP visual blocks for this model. "
+                "Expected visual.transformer.resblocks or visual.trunk.blocks."
+            )
+
+        for block in list(blocks)[-n_blocks:]:
+            for parameter in block.parameters():
+                parameter.requires_grad = True
+
+        for module_name in ("ln_post", "ln_pre", "norm", "fc_norm"):
+            module = getattr(visual, module_name, None)
+            if module is not None:
+                for parameter in module.parameters():
+                    parameter.requires_grad = True
+        projection = getattr(visual, "proj", None)
+        if isinstance(projection, nn.Parameter):
+            projection.requires_grad = True
+
     @torch.no_grad()
     def _build_text_prototypes(self, open_clip, prompt_path: str | Path) -> torch.Tensor:
         tokenizer = open_clip.get_tokenizer(self.clip_model_name)
@@ -105,15 +138,20 @@ class ClipArtClassifier(nn.Module):
         return torch.stack(prototypes, dim=0)
 
     def encode_image(self, images: torch.Tensor) -> torch.Tensor:
-        self.clip.eval()
-        with torch.no_grad():
+        if not getattr(self, "clip_trainable", False):
+            self.clip.eval()
+        grad_enabled = getattr(self, "clip_trainable", False) and self.training
+        with torch.set_grad_enabled(grad_enabled):
             features = self.clip.encode_image(images)
         features = nn.functional.normalize(features.float(), dim=-1)
         return features
 
     def train(self, mode: bool = True):
         super().train(mode)
-        self.clip.eval()
+        if getattr(self, "clip_trainable", False):
+            self.clip.train(mode)
+        else:
+            self.clip.eval()
         return self
 
     def forward(self, images: torch.Tensor):

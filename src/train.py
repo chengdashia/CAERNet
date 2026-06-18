@@ -215,7 +215,7 @@ def train_one_epoch(
                 id_logits=id_barrier_logits,
                 unknown_logits=unknown_logits,
                 id_margin=energy_margin,
-                unknown_margin=unknown_energy_lambda,
+                unknown_margin=unknown_energy_margin,
             )
             loss = loss + unknown_energy_lambda * barrier_loss
             parts["unknown_energy_loss"] = barrier_parts["unknown_energy_loss"]
@@ -332,6 +332,8 @@ def _build_optimizer(model, config: dict, architecture: str = ""):
                 "projectors",       # multi-scale projection heads
                 "scale_gate",       # learnable scale fusion gate
             }
+        if architecture.startswith("clip_"):
+            classifier_keywords |= {"adapter"}
         for name, param in model.named_parameters():
             if not param.requires_grad:
                 continue

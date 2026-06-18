@@ -78,6 +78,7 @@ def build_model(
             adapter_dim=model_kwargs.get("adapter_dim", 512),
             dropout=model_kwargs.get("dropout", 0.1),
             logit_scale=model_kwargs.get("logit_scale", 100.0),
+            unfreeze_last_n_blocks=model_kwargs.get("unfreeze_last_n_blocks", 0),
         )
 
     if architecture == "mth_dcsam_csft":

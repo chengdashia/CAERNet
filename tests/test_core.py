@@ -494,6 +494,31 @@ def test_mixup_training_still_reports_energy_loss():
     assert metrics["energy_loss"] > 0
 
 
+def test_unknown_energy_barrier_uses_configured_unknown_margin():
+    images = torch.zeros(4, 3, 8, 8)
+    targets = torch.tensor([0, 1, 0, 1])
+    dataloader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(images, targets),
+        batch_size=4,
+    )
+    model = torch.nn.Sequential(torch.nn.Flatten(), torch.nn.Linear(3 * 8 * 8, 2))
+    torch.nn.init.zeros_(model[1].weight)
+    torch.nn.init.zeros_(model[1].bias)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+
+    metrics = train_one_epoch(
+        model=model,
+        dataloader=dataloader,
+        optimizer=optimizer,
+        device=torch.device("cpu"),
+        energy_margin=0.0,
+        unknown_energy_lambda=0.01,
+        unknown_energy_margin=-1.0,
+    )
+
+    assert metrics["unknown_energy_loss"] == 0.0
+
+
 def test_paper_mth_reproduction_is_lightweight():
     model = build_registered_model(
         architecture="mth_dcsam_csft",
@@ -610,6 +635,70 @@ def test_frozen_clip_encoder_stays_eval_when_head_trains():
     assert model.training is True
     assert model.classifier.training is True
     assert model.clip.training is False
+
+
+def test_clip_partial_unfreeze_enables_last_visual_blocks_only():
+    class FakeVisual(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.transformer = torch.nn.Module()
+            self.transformer.resblocks = torch.nn.ModuleList(
+                [torch.nn.Linear(4, 4) for _ in range(3)]
+            )
+            self.ln_post = torch.nn.LayerNorm(4)
+            self.proj = torch.nn.Parameter(torch.ones(4, 4))
+
+    class FakeClip(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.visual = FakeVisual()
+
+    model = ClipArtClassifier.__new__(ClipArtClassifier)
+    torch.nn.Module.__init__(model)
+    model.clip = FakeClip()
+    for parameter in model.clip.parameters():
+        parameter.requires_grad = False
+
+    model._unfreeze_last_visual_blocks(1)
+
+    blocks = model.clip.visual.transformer.resblocks
+    assert not any(parameter.requires_grad for parameter in blocks[0].parameters())
+    assert not any(parameter.requires_grad for parameter in blocks[1].parameters())
+    assert all(parameter.requires_grad for parameter in blocks[2].parameters())
+    assert all(parameter.requires_grad for parameter in model.clip.visual.ln_post.parameters())
+    assert model.clip.visual.proj.requires_grad is True
+
+
+def test_clip_adapter_uses_full_lr_when_backbone_lr_is_scaled():
+    class TinyClipAdapter(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.clip = torch.nn.Linear(4, 4)
+            self.adapter = torch.nn.Linear(4, 4)
+            self.classifier = torch.nn.Linear(4, 2)
+
+    model = TinyClipAdapter()
+    config = {
+        "train": {
+            "optimizer": "adamw",
+            "lr": 3.0e-4,
+            "weight_decay": 0.001,
+            "backbone_lr_scale": 0.01,
+        },
+    }
+
+    optimizer = _build_optimizer(model, config, architecture="clip_adapter")
+    lr_by_parameter = {
+        id(parameter): group["lr"]
+        for group in optimizer.param_groups
+        for parameter in group["params"]
+    }
+
+    for name, parameter in model.named_parameters():
+        if name.startswith(("adapter.", "classifier.")):
+            assert lr_by_parameter[id(parameter)] == config["train"]["lr"], name
+        if name.startswith("clip."):
+            assert lr_by_parameter[id(parameter)] == config["train"]["lr"] * 0.01, name
 
 
 def test_clip_probe_augmentation_avoids_random_erasing():
