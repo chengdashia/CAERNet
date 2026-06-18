@@ -13,7 +13,9 @@ model:
   attention_reduction: 8
 loss:
   energy_lambda: 0.0
+  unknown_energy_lambda: 0.0
   energy_margin: -5.0
+  unknown_energy_margin: -1.0
   label_smoothing: 0.1
   contrastive_lambda: 0.1
   contrastive_temperature: 0.1

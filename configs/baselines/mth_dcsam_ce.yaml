@@ -6,7 +6,7 @@ data:
   augment: art
 model:
   architecture: mth_dcsam_csft
-  pretrained: false
+  pretrained: true
   use_coord_attention: false
   embed_dim: 256
   transformer_heads: 8
@@ -14,7 +14,7 @@ model:
   attention_reduction: 8
   attention_kernel: 3
   dropout: 0.2
-  reduced_tail: true
+  reduced_tail: false
 loss:
   energy_lambda: 0.0
   energy_margin: -5.0

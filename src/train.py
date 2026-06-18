@@ -97,9 +97,11 @@ def train_one_epoch(
     pseudo_unknown_mixup_alpha: float = 0.5,
     use_amp: bool = False,
     grad_accumulation_steps: int = 1,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> dict[str, float]:
     model.train()
-    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+    if scaler is None:
+        scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     total_loss = 0.0
     total_ce_loss = 0.0
     total_energy_loss = 0.0
@@ -196,11 +198,24 @@ def train_one_epoch(
             unknown_logits = unknown_output[0] if isinstance(unknown_output, tuple) else unknown_output
             if use_amp:
                 unknown_logits = unknown_logits.float()
+
+            # When MixUp is active, the main logits come from mixed images.
+            # For the energy barrier we need clean ID logits from original
+            # images so both sides of the barrier compare the same thing.
+            if mixup_alpha > 0.0:
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    id_barrier_output = model(original_images)
+                id_barrier_logits = id_barrier_output[0] if isinstance(id_barrier_output, tuple) else id_barrier_output
+                if use_amp:
+                    id_barrier_logits = id_barrier_logits.float()
+            else:
+                id_barrier_logits = logits
+
             barrier_loss, barrier_parts = energy_barrier_loss(
-                id_logits=logits,
+                id_logits=id_barrier_logits,
                 unknown_logits=unknown_logits,
                 id_margin=energy_margin,
-                unknown_margin=unknown_energy_margin,
+                unknown_margin=unknown_energy_lambda,
             )
             loss = loss + unknown_energy_lambda * barrier_loss
             parts["unknown_energy_loss"] = barrier_parts["unknown_energy_loss"]
@@ -689,6 +704,10 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
         }
     )
 
+    # Initialize GradScaler once so its dynamic state (growth interval,
+    # backoff) persists across epochs instead of resetting every epoch.
+    amp_scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+
     for epoch in range(start_epoch, config["train"]["epochs"] + 1):
         train_metrics = train_one_epoch(
             model=model,
@@ -709,6 +728,7 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
             pseudo_unknown_mixup_alpha=config["train"].get("pseudo_unknown_mixup_alpha", 0.5),
             use_amp=use_amp,
             grad_accumulation_steps=config["train"].get("grad_accumulation_steps", 1),
+            scaler=amp_scaler,
         )
         val_metrics = evaluate(model, val_loader, device, num_classes=len(class_names))
         test_metrics = None

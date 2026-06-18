@@ -42,10 +42,10 @@ class ContextAwareScaleGate(nn.Module):
             ``(B, embed_dim)`` fused embedding.
         """
         # Cross-scale context: each scale's attention score is conditioned on
-        # the concatenated descriptors of ALL scales.
-        descriptors = stacked.mean(dim=1, keepdim=True).expand_as(stacked)
+        # the individual per-scale embeddings (not a collapsed mean), so the
+        # gate can model real inter-scale complementarity.
         context = torch.cat(
-            [descriptors[:, i] for i in range(stacked.size(1))], dim=-1,
+            [stacked[:, i] for i in range(stacked.size(1))], dim=-1,
         )
         scores = self.gate(context)
         weights = torch.softmax(scores, dim=1)  # (B, num_scales)

@@ -1,44 +1,89 @@
 templates:
   - "a painting in the {label} style"
   - "an artwork representative of {label}"
+  - "a work of art characterized by {label} aesthetics"
+  - "an image showcasing the visual qualities of {label}"
+  - "a piece that embodies the principles of {label}"
+  - "a composition rendered in the {label} tradition"
+
 classes:
   art_nouveau:
     label: "Art Nouveau"
     descriptions:
       - "decorative flowing lines, floral motifs, and elegant ornamental composition"
+      - "sinuous organic forms inspired by nature, whiplash curves, and intricate botanical patterns"
+      - "rich jewel tones, muted pastels, and gold leaf accents in flat decorative planes"
+      - "subjects drawn from mythology and natural beauty, with stylized female figures and vines"
+      - "ornate graphic design sensibility blending illustration, architecture, and decorative arts"
   baroque:
     label: "Baroque"
     descriptions:
       - "dramatic light and shadow, theatrical composition, and rich detail"
+      - "intense chiaroscuro contrasts, deep spatial recession, and sweeping diagonal movement"
+      - "opulent color palettes of deep crimson, gold, and umber with luminous skin tones"
+      - "religious and mythological narratives rendered with theatrical grandeur and emotional intensity"
+      - "dynamic brushwork, elaborate ornamentation, and monumental scale designed to inspire awe"
   expressionism:
     label: "Expressionism"
     descriptions:
       - "distorted forms, intense color, and emotional brushwork"
+      - "jarring, non-naturalistic color chosen for psychological impact rather than representation"
+      - "agitated, angular lines and rough paint application conveying inner turmoil and anxiety"
+      - "subjects drawn from social alienation, existential dread, and modern urban life"
+      - "rejection of naturalism in favor of raw subjective feeling and visceral visual confrontation"
   impressionism:
     label: "Impressionism"
     descriptions:
       - "visible short brushstrokes, changing light, and outdoor color atmosphere"
+      - "broken color technique capturing fleeting light effects and atmospheric vibration"
+      - "plein air subjects: landscapes, water, gardens, and leisure scenes bathed in sunlight"
+      - "high-key palette of luminous blues, greens, and warm highlights with minimal black"
+      - "soft edges, dappled reflections, and an emphasis on sensory perception over precise form"
   post_impressionism:
     label: "Post-Impressionism"
     descriptions:
       - "structured color, expressive brushwork, and symbolic composition after Impressionism"
+      - "bold, arbitrary color and geometric simplification pushing beyond naturalistic observation"
+      - "emphatic brushstrokes and flattened perspective used to convey emotional and symbolic depth"
+      - "subjects range from intimate interiors and portraits to monumental landscape abstractions"
+      - "synthesis of Impressionist light with personal vision, foreshadowing modern art movements"
   realism:
     label: "Realism"
     descriptions:
       - "naturalistic depiction of ordinary subjects with restrained idealization"
+      - "unflinching observation of everyday life, labor, and social conditions without sentimentality"
+      - "muted, earthy color palettes emphasizing material texture and physical weight"
+      - "precise draftsmanship and controlled brushwork prioritizing truthful representation"
+      - "focus on working-class subjects, rural landscapes, and contemporary social commentary"
   renaissance:
     label: "Renaissance"
     descriptions:
       - "balanced perspective, classical proportion, and harmonious human figures"
+      - "mastery of linear perspective, sfumato modeling, and anatomical accuracy"
+      - "luminous, clear color with gradual tonal transitions and refined glazing techniques"
+      - "biblical, mythological, and portrait subjects reflecting humanist ideals and classical revival"
+      - "geometric compositional balance, pyramidal structure, and serene spatial clarity"
   romanticism:
     label: "Romanticism"
     descriptions:
       - "dramatic emotion, sublime landscapes, and expressive historical scenes"
+      - "turbulent skies, vast natural vistas, and awe-inspiring depictions of nature's power"
+      - "rich, saturated color with deep shadows and brilliant highlights heightening emotional drama"
+      - "themes of heroism, revolution, exoticism, and the individual confronting the sublime"
+      - "loose, energetic brushwork and atmospheric effects conveying passion and imagination"
   surrealism:
     label: "Surrealism"
     descriptions:
       - "dreamlike imagery, unexpected object combinations, and irrational scenes"
+      - "hyper-realistic rendering of impossible spaces, melting forms, and metamorphic figures"
+      - "uncanny juxtapositions and scale distortions creating a sense of psychological displacement"
+      - "exploration of the unconscious mind, desire, fear, and the logic of dreams"
+      - "meticulous technical execution applied to fantastical, impossible, and hallucinatory subjects"
   ukiyo_e:
     label: "Ukiyo-e"
     descriptions:
       - "Japanese woodblock print style with flat color, strong outlines, and everyday scenes"
+      - "bold compositional cropping, asymmetrical balance, and decorative flat color planes"
+      - "vibrant aniline dyes and delicate bokashi color gradations across water and sky"
+      - "subjects depicting floating world entertainment, landscapes, kabuki actors, and courtesans"
+      - "refined line work, patterned textiles, and distinctive negative space in print composition"

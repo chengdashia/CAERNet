@@ -69,15 +69,37 @@ class MobileNetTransformerHybrid(nn.Module):
         dropout: float = 0.2,
         attention_reduction: int = 8,
         attention_kernel: int = 3,
-        reduced_tail: bool = True,
+        reduced_tail: bool = False,
     ):
         super().__init__()
-        weights = (
-            models.MobileNet_V3_Small_Weights.DEFAULT
-            if pretrained and not reduced_tail
-            else None
-        )
-        backbone = models.mobilenet_v3_small(weights=weights, reduced_tail=reduced_tail)
+
+        # Always build the target architecture first (with or without reduced_tail)
+        backbone = models.mobilenet_v3_small(weights=None, reduced_tail=reduced_tail)
+
+        # Load ImageNet pretrained weights via partial state-dict matching.
+        # When reduced_tail=True the deep layers have different shapes, so we
+        # load only the layers that match and randomly initialise the rest.
+        # When reduced_tail=False this is equivalent to a full pretrained load.
+        if pretrained:
+            pretrained_backbone = models.mobilenet_v3_small(
+                weights=models.MobileNet_V3_Small_Weights.DEFAULT,
+                reduced_tail=False,
+            )
+            pretrained_sd = pretrained_backbone.features.state_dict()
+            target_sd = backbone.features.state_dict()
+            compatible = {
+                k: v for k, v in pretrained_sd.items()
+                if k in target_sd and v.shape == target_sd[k].shape
+            }
+            missing_keys = target_sd.keys() - compatible.keys()
+            target_sd.update(compatible)
+            backbone.features.load_state_dict(target_sd)
+            n_loaded = len(compatible)
+            n_total = len(target_sd)
+            print(
+                f"[MTH] Loaded {n_loaded}/{n_total} pretrained MobileNetV3-Small "
+                f"weight tensors ({len(missing_keys)} mismatched/skipped)."
+            )
 
         # --- Split backbone ---
         # Shallow: layers 0-8 → 16×16, 48 channels (for Transformer branch)

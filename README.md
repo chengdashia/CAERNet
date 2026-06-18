@@ -7,7 +7,7 @@
 - CLIP zero-shot：基于艺术风格 prompt 的文本原型分类。
 - CLIP linear probe：冻结 CLIP image encoder，只训练线性分类头。
 - CLIP adapter：冻结 CLIP image encoder，训练轻量 adapter + 分类头。
-- MS-CAERNet：ResNet50 多尺度坐标注意力 + energy / SupCon 视觉分支。
+- MS-CAERNet：ResNet50 多尺度坐标注意力 + CASG（Context-Aware Scale Gate）跨尺度融合 + energy barrier / SupCon 视觉分支。CASG 通过上下文感知门控机制动态加权 ResNet 各阶段的多尺度特征，避免简单均值融合导致的信息退化。
 - CNN baselines：ResNet50、EfficientNetV2-S、ConvNeXt-Tiny、RegNetY 等。
 
 关键源码：
@@ -29,7 +29,7 @@ cd /Users/dong/Documents/SCI
 pip install -r classify/requirements.txt
 ```
 
-CLIP/VLM 实验需要 `open_clip_torch`。第一次运行 CLIP 或 torchvision 预训练模型时会下载权重。
+CLIP/VLM 实验需要 `open_clip_torch`。CLIP 模型通过 `clip_pretrained` 字段指定预训练来源（如 `openai`），首次运行时由 open_clip 自动下载。ViT-B-16 和 ViT-L-14 均支持。
 
 ## 数据
 

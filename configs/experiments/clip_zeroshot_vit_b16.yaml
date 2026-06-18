@@ -8,7 +8,7 @@ data:
 model:
   architecture: clip_zero_shot
   clip_model_name: ViT-B-16
-  clip_pretrained: /home/kmyh/classify/models/open_clip/vit_b16_openai.bin
+  clip_pretrained: openai
   prompt_path: classify/CAERNet/configs/prompts/artbench10_styles.yaml
 loss:
   energy_lambda: 0.0
