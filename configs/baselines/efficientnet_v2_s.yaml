@@ -33,3 +33,7 @@ train:
   grad_accumulation_steps: 1
 output:
   run_dir: classify/outputs/runs/A100/baseline_efficientnet_v2_s_paper_b256x1_art_lr1e4
+eval:
+  test_each_epoch: true
+  test_dir: classify/data/artbench10/test
+  tta_horizontal_flip: false

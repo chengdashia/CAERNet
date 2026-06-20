@@ -42,4 +42,4 @@ output:
 eval:
   test_each_epoch: true
   test_dir: classify/data/artbench10/test
-  tta_horizontal_flip: true
+  tta_horizontal_flip: false
