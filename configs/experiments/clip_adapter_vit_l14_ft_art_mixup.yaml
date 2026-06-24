@@ -1,0 +1,44 @@
+data:
+  train_dir: classify/data/artbench10/train
+  val_dir: classify/data/artbench10_paper/val
+  image_size: 224
+  num_workers: 8
+  augment: art
+  normalize: clip
+model:
+  architecture: clip_adapter
+  clip_model_name: ViT-L-14
+  clip_pretrained: openai
+  adapter_dim: 512
+  dropout: 0.1
+  unfreeze_last_n_blocks: 4
+loss:
+  energy_lambda: 0.0
+  unknown_energy_lambda: 0.01
+  energy_margin: -5.0
+  unknown_energy_margin: -1.0
+  label_smoothing: 0.1
+  contrastive_lambda: 0.1
+  contrastive_temperature: 0.07
+train:
+  seed: 42
+  device: cuda
+  epochs: 100
+  batch_size: 96
+  lr: 0.0003
+  min_lr: 0.000003
+  weight_decay: 0.001
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+  amp: true
+  patience: 25
+  mixup_alpha: 0.2
+  pseudo_unknown_mixup_alpha: 0.5
+  backbone_lr_scale: 0.05
+output:
+  run_name: clip_adapter_vit_l14_ft_art_mixup
+eval:
+  test_each_epoch: true
+  test_dir: classify/data/artbench10/test
+  tta_horizontal_flip: false
