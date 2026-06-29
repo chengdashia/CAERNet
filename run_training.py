@@ -51,6 +51,30 @@ def build_effective_config(config_path: Path, hardware_path: Path | None = None)
     return config
 
 
+def apply_cli_overrides(
+    config: dict,
+    seed: int | None = None,
+    run_suffix: str | None = None,
+    final_test_only: bool = False,
+) -> dict:
+    if seed is not None:
+        config.setdefault("train", {})["seed"] = seed
+    if run_suffix:
+        output = config.setdefault("output", {})
+        base_name = output.get("run_name")
+        if not base_name:
+            base_name = Path(output["run_dir"]).name
+        run_name = f"{base_name}_{run_suffix}"
+        output["run_name"] = run_name
+        if output.get("run_dir"):
+            output["run_dir"] = str(Path(output["run_dir"]).parent / run_name)
+    if final_test_only:
+        eval_config = config.setdefault("eval", {})
+        eval_config["test_each_epoch"] = False
+        eval_config["test_after_training"] = True
+    return config
+
+
 def _ensure_dataset_ready(config: dict):
     required_paths = [
         Path(config["data"]["train_dir"]),
@@ -109,12 +133,29 @@ def main() -> int:
     parser.add_argument("--config", required=True, help="Experiment YAML path.")
     parser.add_argument("--hardware", default=None, help="Hardware profile name or YAML path.")
     parser.add_argument("--dry-run", action="store_true", help="Build data/model and run one forward pass.")
+    parser.add_argument("--seed", type=int, default=None, help="Override train.seed.")
+    parser.add_argument(
+        "--run-suffix",
+        default=None,
+        help="Append a suffix to output.run_name and output.run_dir.",
+    )
+    parser.add_argument(
+        "--final-test-only",
+        action="store_true",
+        help="Disable per-epoch test evaluation and test the best checkpoint once.",
+    )
     args = parser.parse_args()
 
     os.chdir(REPO_ROOT)
     config_path = _resolve_config_path(args.config)
     hardware_path = _resolve_hardware_path(args.hardware)
     config = build_effective_config(config_path, hardware_path)
+    apply_cli_overrides(
+        config,
+        seed=args.seed,
+        run_suffix=args.run_suffix,
+        final_test_only=args.final_test_only,
+    )
     _ensure_dataset_ready(config)
     train_from_config(config, dry_run=args.dry_run)
     return 0

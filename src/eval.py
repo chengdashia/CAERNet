@@ -9,6 +9,7 @@ import yaml
 
 from src.datasets import build_dataloaders
 from src.metrics import classification_metrics, expected_calibration_error
+from src.model_output import unpack_model_output
 from src.models import build_model
 
 
@@ -27,15 +28,24 @@ def evaluate(
     all_targets = []
     total_loss = 0.0
     total_examples = 0
+    style_weight_sum = None
 
     for images, targets in dataloader:
         images = images.to(device)
         targets = targets.to(device)
-        output = model(images)
-        logits = output[0] if isinstance(output, tuple) else output
+        output_fields = unpack_model_output(model(images))
+        logits = output_fields["logits"]
+        layer_weights = output_fields["style_layer_weights"]
+        if layer_weights is not None:
+            batch_weight_sum = layer_weights.detach().float().sum(dim=0).cpu()
+            style_weight_sum = (
+                batch_weight_sum
+                if style_weight_sum is None
+                else style_weight_sum + batch_weight_sum
+            )
         if tta_horizontal_flip:
             flipped_output = model(torch.flip(images, dims=(-1,)))
-            flipped_logits = flipped_output[0] if isinstance(flipped_output, tuple) else flipped_output
+            flipped_logits = unpack_model_output(flipped_output)["logits"]
             logits = (logits + flipped_logits) * 0.5
         loss = torch.nn.functional.cross_entropy(logits, targets)
         probabilities = torch.softmax(logits, dim=1)
@@ -56,6 +66,10 @@ def evaluate(
             torch.cat(all_probabilities),
             torch.cat(all_targets),
         )
+    if style_weight_sum is not None:
+        mean_weights = style_weight_sum / max(total_examples, 1)
+        for index, value in enumerate(mean_weights.tolist()):
+            metrics[f"style_layer_weight_{index}"] = float(value)
     return metrics
 
 

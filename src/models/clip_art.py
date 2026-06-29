@@ -27,6 +27,27 @@ def _clip_embed_dim(model) -> int:
     raise ValueError("Could not infer CLIP embedding dimension from model.")
 
 
+def _build_feature_adapter(
+    embed_dim: int,
+    adapter_dim: int,
+    baseline: bool,
+    dropout: float,
+) -> nn.Sequential:
+    if baseline:
+        return nn.Sequential(
+            nn.Linear(embed_dim, adapter_dim, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(adapter_dim, embed_dim, bias=False),
+            nn.ReLU(inplace=True),
+        )
+    return nn.Sequential(
+        nn.Linear(embed_dim, adapter_dim),
+        nn.ReLU(inplace=True),
+        nn.Dropout(dropout),
+        nn.Linear(adapter_dim, embed_dim),
+    )
+
+
 class ClipArtClassifier(nn.Module):
     """CLIP image encoder with zero-shot, linear, or adapter heads."""
 
@@ -42,16 +63,19 @@ class ClipArtClassifier(nn.Module):
         dropout: float = 0.1,
         logit_scale: float = 100.0,
         unfreeze_last_n_blocks: int = 0,
+        adapter_ratio: float = 0.2,
+        unfreeze_visual: bool = False,
     ):
         super().__init__()
-        if mode not in {"zero_shot", "linear_probe", "adapter"}:
+        if mode not in {"zero_shot", "linear_probe", "adapter", "clip_adapter_baseline"}:
             raise ValueError(f"Unsupported CLIP art mode: {mode}")
         self.mode = mode
         self.num_classes = num_classes
         self.class_names = class_names
         self.clip_model_name = clip_model_name
         self.logit_scale = logit_scale
-        self.clip_trainable = unfreeze_last_n_blocks > 0
+        self.adapter_ratio = adapter_ratio
+        self.clip_trainable = unfreeze_visual or unfreeze_last_n_blocks > 0
 
         open_clip = _require_open_clip()
         pretrained_arg = pretrained
@@ -68,9 +92,13 @@ class ClipArtClassifier(nn.Module):
             clip_model_name,
             pretrained=pretrained_arg,
         )
+        if mode == "clip_adapter_baseline" and hasattr(self.clip, "logit_scale"):
+            self.logit_scale = float(self.clip.logit_scale.detach().exp())
         for parameter in self.clip.parameters():
             parameter.requires_grad = False
-        if unfreeze_last_n_blocks > 0:
+        if unfreeze_visual:
+            self._unfreeze_visual_encoder()
+        elif unfreeze_last_n_blocks > 0:
             self._unfreeze_last_visual_blocks(unfreeze_last_n_blocks)
         self.clip.eval()
 
@@ -80,14 +108,20 @@ class ClipArtClassifier(nn.Module):
 
         if mode == "linear_probe":
             self.classifier = nn.Linear(embed_dim, num_classes)
-        elif mode == "adapter":
-            self.adapter = nn.Sequential(
-                nn.Linear(embed_dim, adapter_dim),
-                nn.ReLU(inplace=True),
-                nn.Dropout(dropout),
-                nn.Linear(adapter_dim, embed_dim),
+        elif mode in {"adapter", "clip_adapter_baseline"}:
+            self.adapter = _build_feature_adapter(
+                embed_dim=embed_dim,
+                adapter_dim=adapter_dim,
+                baseline=mode == "clip_adapter_baseline",
+                dropout=dropout,
             )
-            self.classifier = nn.Linear(embed_dim, num_classes)
+            if mode == "adapter":
+                self.classifier = nn.Linear(embed_dim, num_classes)
+            else:
+                if prompt_path is None:
+                    raise ValueError("clip_adapter_baseline requires model.prompt_path")
+                text_features = self._build_text_prototypes(open_clip, prompt_path)
+                self.register_buffer("text_features", text_features, persistent=False)
         else:
             if prompt_path is None:
                 raise ValueError("clip_zero_shot requires model.prompt_path")
@@ -114,7 +148,7 @@ class ClipArtClassifier(nn.Module):
             for parameter in block.parameters():
                 parameter.requires_grad = True
 
-        for module_name in ("ln_post", "ln_pre", "norm", "fc_norm"):
+        for module_name in ("ln_post", "norm", "fc_norm"):
             module = getattr(visual, module_name, None)
             if module is not None:
                 for parameter in module.parameters():
@@ -122,6 +156,13 @@ class ClipArtClassifier(nn.Module):
         projection = getattr(visual, "proj", None)
         if isinstance(projection, nn.Parameter):
             projection.requires_grad = True
+
+    def _unfreeze_visual_encoder(self):
+        visual = getattr(self.clip, "visual", None)
+        if visual is None:
+            raise ValueError("Cannot unfreeze CLIP visual encoder: model has no visual module.")
+        for parameter in visual.parameters():
+            parameter.requires_grad = True
 
     @torch.no_grad()
     def _build_text_prototypes(self, open_clip, prompt_path: str | Path) -> torch.Tensor:
@@ -162,6 +203,14 @@ class ClipArtClassifier(nn.Module):
 
         if self.adapter is not None:
             adapted = self.adapter(features)
+            if self.mode == "clip_adapter_baseline":
+                features = nn.functional.normalize(
+                    (1.0 - self.adapter_ratio) * features
+                    + self.adapter_ratio * adapted,
+                    dim=-1,
+                )
+                logits = self.logit_scale * features @ self.text_features.T
+                return logits, features
             features = nn.functional.normalize(features + adapted, dim=-1)
 
         if self.classifier is None:
@@ -180,3 +229,11 @@ def build_clip_linear_probe(num_classes: int, **kwargs) -> ClipArtClassifier:
 
 def build_clip_adapter(num_classes: int, **kwargs) -> ClipArtClassifier:
     return ClipArtClassifier(num_classes=num_classes, mode="adapter", **kwargs)
+
+
+def build_clip_adapter_baseline(num_classes: int, **kwargs) -> ClipArtClassifier:
+    return ClipArtClassifier(
+        num_classes=num_classes,
+        mode="clip_adapter_baseline",
+        **kwargs,
+    )

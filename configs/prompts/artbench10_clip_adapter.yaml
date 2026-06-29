@@ -1,0 +1,24 @@
+templates:
+  - "a painting in the {label} style"
+
+classes:
+  art_nouveau:
+    label: "Art Nouveau"
+  baroque:
+    label: "Baroque"
+  expressionism:
+    label: "Expressionism"
+  impressionism:
+    label: "Impressionism"
+  post_impressionism:
+    label: "Post-Impressionism"
+  realism:
+    label: "Realism"
+  renaissance:
+    label: "Renaissance"
+  romanticism:
+    label: "Romanticism"
+  surrealism:
+    label: "Surrealism"
+  ukiyo_e:
+    label: "Ukiyo-e"

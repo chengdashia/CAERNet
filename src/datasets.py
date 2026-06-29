@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from torch.utils.data import DataLoader
+import torch
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 from torchvision.transforms import InterpolationMode
 
@@ -152,6 +153,8 @@ def build_dataloaders(
     num_workers: int = 4,
     augment: str = "basic",
     normalize: str = "imagenet",
+    train_fraction: float = 1.0,
+    subset_seed: int = 42,
 ):
     train_dataset = datasets.ImageFolder(
         root=str(Path(train_dir)),
@@ -175,6 +178,20 @@ def build_dataloaders(
             f"train={train_dataset.classes}, val={val_dataset.classes}"
         )
 
+    train_classes = train_dataset.classes
+    if not 0.0 < train_fraction <= 1.0:
+        raise ValueError("train_fraction must be in (0, 1].")
+    if train_fraction < 1.0:
+        generator = torch.Generator().manual_seed(subset_seed)
+        indices: list[int] = []
+        targets = torch.tensor(train_dataset.targets)
+        for class_index in range(len(train_classes)):
+            class_indices = torch.where(targets == class_index)[0]
+            keep = max(1, round(len(class_indices) * train_fraction))
+            permutation = torch.randperm(len(class_indices), generator=generator)
+            indices.extend(class_indices[permutation[:keep]].tolist())
+        train_dataset = Subset(train_dataset, sorted(indices))
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -193,4 +210,4 @@ def build_dataloaders(
         prefetch_factor=2 if num_workers > 0 else None,
         persistent_workers=num_workers > 0,
     )
-    return train_loader, val_loader, train_dataset.classes
+    return train_loader, val_loader, train_classes

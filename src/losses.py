@@ -95,6 +95,15 @@ def supervised_contrastive_loss(
     return -mean_log_prob.mean()
 
 
+def content_style_orthogonality_loss(
+    content_features: torch.Tensor,
+    style_features: torch.Tensor,
+) -> torch.Tensor:
+    content = nn.functional.normalize(content_features, dim=1)
+    style = nn.functional.normalize(style_features, dim=1)
+    return (content * style).sum(dim=1).pow(2).mean()
+
+
 def classification_loss(
     logits: torch.Tensor,
     targets: torch.Tensor,

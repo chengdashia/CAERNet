@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import random
 import sys
@@ -28,12 +29,14 @@ from src.datasets import build_dataloaders, build_imagefolder_dataset
 from src.eval import evaluate
 from src.losses import (
     classification_loss,
+    content_style_orthogonality_loss,
     energy_barrier_loss,
     energy_regularization_loss,
     mixup_data,
     mixup_cross_entropy,
     supervised_contrastive_loss,
 )
+from src.model_output import unpack_model_output
 from src.models import build_model
 
 
@@ -90,6 +93,7 @@ def train_one_epoch(
     label_smoothing: float = 0.0,
     contrastive_lambda: float = 0.0,
     contrastive_temperature: float = 0.1,
+    orthogonality_lambda: float = 0.0,
     unknown_energy_lambda: float = 0.0,
     unknown_energy_margin: float = -1.0,
     gradient_clip: float = 0.0,
@@ -107,6 +111,7 @@ def train_one_epoch(
     total_energy_loss = 0.0
     total_unknown_energy_loss = 0.0
     total_contrastive_loss = 0.0
+    total_orthogonality_loss = 0.0
     total_examples = 0
     total_correct = 0
     optimizer.zero_grad(set_to_none=True)
@@ -143,35 +148,69 @@ def train_one_epoch(
         with torch.amp.autocast("cuda", enabled=use_amp):
             output = model(images)
 
-        if isinstance(output, tuple):
-            logits, features = output
-        else:
-            logits, features = output, None
+        output_fields = unpack_model_output(output)
+        logits = output_fields["logits"]
+        features = output_fields["features"]
+        content_features = output_fields["content_features"]
+        style_features = output_fields["style_features"]
 
         # Cast to FP32 for numerically stable loss computation
         if use_amp:
             logits = logits.float()
             if features is not None:
                 features = features.float()
+            if content_features is not None:
+                content_features = content_features.float()
+            if style_features is not None:
+                style_features = style_features.float()
 
         if mixup_alpha > 0:
             ce_loss = mixup_cross_entropy(logits, targets_a, targets_b, lam, label_smoothing=label_smoothing)
             energy_loss = energy_regularization_loss(logits, margin=energy_margin)
-            if features is not None and contrastive_lambda > 0.0:
+            clean_fields = None
+            if contrastive_lambda > 0.0 or orthogonality_lambda > 0.0:
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    clean_fields = unpack_model_output(model(original_images))
+            clean_features = clean_fields["features"] if clean_fields else None
+            clean_content = clean_fields["content_features"] if clean_fields else None
+            clean_style = clean_fields["style_features"] if clean_fields else None
+            if use_amp:
+                if clean_features is not None:
+                    clean_features = clean_features.float()
+                if clean_content is not None:
+                    clean_content = clean_content.float()
+                if clean_style is not None:
+                    clean_style = clean_style.float()
+            if clean_features is not None and contrastive_lambda > 0.0:
                 contrastive_loss = supervised_contrastive_loss(
-                    features, targets_a, temperature=contrastive_temperature,
+                    clean_features,
+                    targets,
+                    temperature=contrastive_temperature,
                 )
             else:
                 contrastive_loss = logits.new_tensor(0.0)
+            if (
+                clean_content is not None
+                and clean_style is not None
+                and orthogonality_lambda > 0.0
+            ):
+                orthogonality_loss = content_style_orthogonality_loss(
+                    clean_content,
+                    clean_style,
+                )
+            else:
+                orthogonality_loss = logits.new_tensor(0.0)
             batch_loss = (
                 ce_loss
                 + energy_lambda * energy_loss
                 + contrastive_lambda * contrastive_loss
+                + orthogonality_lambda * orthogonality_loss
             )
             parts = {
                 "ce_loss": float(ce_loss.detach().cpu()),
                 "energy_loss": float(energy_loss.detach().cpu()),
                 "contrastive_loss": float(contrastive_loss.detach().cpu()),
+                "orthogonality_loss": float(orthogonality_loss.detach().cpu()),
             }
             loss = batch_loss
         else:
@@ -185,6 +224,21 @@ def train_one_epoch(
                 contrastive_lambda=contrastive_lambda,
                 contrastive_temperature=contrastive_temperature,
             )
+            if (
+                content_features is not None
+                and style_features is not None
+                and orthogonality_lambda > 0.0
+            ):
+                orthogonality_loss = content_style_orthogonality_loss(
+                    content_features,
+                    style_features,
+                )
+                loss = loss + orthogonality_lambda * orthogonality_loss
+            else:
+                orthogonality_loss = logits.new_tensor(0.0)
+            parts["orthogonality_loss"] = float(
+                orthogonality_loss.detach().cpu()
+            )
 
         if unknown_energy_lambda > 0.0:
             index = torch.randperm(original_images.size(0), device=original_images.device)
@@ -195,7 +249,7 @@ def train_one_epoch(
             )
             with torch.amp.autocast("cuda", enabled=use_amp):
                 unknown_output = model(pseudo_unknown_images)
-            unknown_logits = unknown_output[0] if isinstance(unknown_output, tuple) else unknown_output
+            unknown_logits = unpack_model_output(unknown_output)["logits"]
             if use_amp:
                 unknown_logits = unknown_logits.float()
 
@@ -205,7 +259,7 @@ def train_one_epoch(
             if mixup_alpha > 0.0:
                 with torch.amp.autocast("cuda", enabled=use_amp):
                     id_barrier_output = model(original_images)
-                id_barrier_logits = id_barrier_output[0] if isinstance(id_barrier_output, tuple) else id_barrier_output
+                id_barrier_logits = unpack_model_output(id_barrier_output)["logits"]
                 if use_amp:
                     id_barrier_logits = id_barrier_logits.float()
             else:
@@ -235,6 +289,7 @@ def train_one_epoch(
         total_energy_loss += parts["energy_loss"] * batch_size
         total_unknown_energy_loss += parts["unknown_energy_loss"] * batch_size
         total_contrastive_loss += parts["contrastive_loss"] * batch_size
+        total_orthogonality_loss += parts["orthogonality_loss"] * batch_size
         if mixup_alpha > 0:
             # MixUp: accuracy is lam * acc_a + (1-lam) * acc_b
             correct_a = predictions.eq(targets_a).float()
@@ -260,6 +315,7 @@ def train_one_epoch(
                     "loss": f"{total_loss / denominator:.4f}",
                     "ce": f"{total_ce_loss / denominator:.4f}",
                     "contrast": f"{total_contrastive_loss / denominator:.4f}",
+                    "orth": f"{total_orthogonality_loss / denominator:.4f}",
                     "acc": f"{total_correct / denominator:.4f}",
                     "lr": f"{optimizer.param_groups[0]['lr']:.2e}",
                 }
@@ -275,6 +331,7 @@ def train_one_epoch(
         "energy_loss": _safe_scalar(total_energy_loss) / denominator,
         "unknown_energy_loss": _safe_scalar(total_unknown_energy_loss) / denominator,
         "contrastive_loss": _safe_scalar(total_contrastive_loss) / denominator,
+        "orthogonality_loss": _safe_scalar(total_orthogonality_loss) / denominator,
         "accuracy": _safe_scalar(total_correct) / denominator,
     }
 
@@ -334,6 +391,8 @@ def _build_optimizer(model, config: dict, architecture: str = ""):
             }
         if architecture.startswith("clip_"):
             classifier_keywords |= {"adapter"}
+        if architecture == "clip_mlssa":
+            classifier_keywords |= {"style_statistics", "fusion_gate"}
         for name, param in model.named_parameters():
             if not param.requires_grad:
                 continue
@@ -563,6 +622,11 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
         num_workers=config["data"].get("num_workers", 4),
         augment=config["data"].get("augment", "basic"),
         normalize=config["data"].get("normalize", "imagenet"),
+        train_fraction=config["data"].get("train_fraction", 1.0),
+        subset_seed=config["data"].get(
+            "subset_seed",
+            config["train"].get("seed", 42),
+        ),
     )
     model = build_model(
         architecture=config["model"]["architecture"],
@@ -592,7 +656,7 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
         model.eval()
         with torch.no_grad():
             output = model(images[: min(2, images.size(0))])
-        logits = output[0] if isinstance(output, tuple) else output
+        logits = unpack_model_output(output)["logits"]
         print(
             {
                 "dry_run": True,
@@ -606,10 +670,12 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
     eval_config = config.get("eval", {})
     test_loader = None
     test_metric_prefix = "test"
-    if eval_config.get("test_each_epoch", False):
+    if eval_config.get("test_each_epoch", False) or eval_config.get("test_after_training", False):
         test_dir = eval_config.get("test_dir")
         if not test_dir:
-            raise ValueError("eval.test_each_epoch=true requires eval.test_dir.")
+            raise ValueError(
+                "eval.test_each_epoch or eval.test_after_training requires eval.test_dir."
+            )
         test_loader = _build_eval_loader(
             eval_dir=test_dir,
             image_size=config["data"]["image_size"],
@@ -647,6 +713,11 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
                 f"{test_metric_prefix}_{key}": _safe_scalar(value)
                 for key, value in test_metrics.items()
             })
+            if eval_config.get("test_after_training", False):
+                (output_dir / "test_metrics.json").write_text(
+                    json.dumps(test_metrics, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
         row["best_epoch"] = 0
         row["best_val_accuracy"] = val_metrics["accuracy"]
         history.append(row)
@@ -689,6 +760,7 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
             "energy_lambda": config["loss"].get("energy_lambda", 0.0),
             "label_smoothing": config["loss"].get("label_smoothing", 0.0),
             "contrastive_lambda": config["loss"].get("contrastive_lambda", 0.0),
+            "orthogonality_lambda": config["loss"].get("orthogonality_lambda", 0.0),
             "epochs": config["train"]["epochs"],
             "batch_size": config["train"]["batch_size"],
             "optimizer": config["train"].get("optimizer", "adamw"),
@@ -723,6 +795,7 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
             label_smoothing=config["loss"].get("label_smoothing", 0.0),
             contrastive_lambda=config["loss"].get("contrastive_lambda", 0.0),
             contrastive_temperature=config["loss"].get("contrastive_temperature", 0.1),
+            orthogonality_lambda=config["loss"].get("orthogonality_lambda", 0.0),
             unknown_energy_lambda=config["loss"].get("unknown_energy_lambda", 0.0),
             unknown_energy_margin=config["loss"].get("unknown_energy_margin", -1.0),
             gradient_clip=config["train"].get("gradient_clip", 0.0),
@@ -734,7 +807,7 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
         )
         val_metrics = evaluate(model, val_loader, device, num_classes=len(class_names))
         test_metrics = None
-        if test_loader is not None:
+        if test_loader is not None and eval_config.get("test_each_epoch", False):
             test_metrics = evaluate(
                 model,
                 test_loader,
@@ -805,6 +878,21 @@ def train_from_config(config_path: Path | dict | None = None, dry_run: bool = Fa
             scheduler.step()
 
     _write_history(history, history_path)
+    if eval_config.get("test_after_training", False):
+        best_checkpoint = torch.load(output_dir / "best.pt", map_location=device)
+        model.load_state_dict(best_checkpoint["model_state"])
+        test_metrics = evaluate(
+            model,
+            test_loader,
+            device,
+            num_classes=len(class_names),
+            tta_horizontal_flip=eval_config.get("tta_horizontal_flip", False),
+        )
+        (output_dir / "test_metrics.json").write_text(
+            json.dumps(test_metrics, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print({"final_test": test_metrics, "checkpoint": str(output_dir / "best.pt")})
 
 
 def main():
